@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Usage:
+#   ./convert <INPUT_SOURCE> [workdir] [--language xx] [additional UltraSinger flags]
+#   - INPUT_SOURCE: full URL to a YouTube video or mp3 song locally
+#   - workdir: directory where 'songs' will be created (default: $PWD)
+#   - --language xx: override language detection, (i.e `--language en` or `--language es`)
+#   - additional flags passed to UltraSinger
+
+if [ $# -lt 1 ]; then
+  echo "Usage: $(basename "$0") <INPUT_SOURCE:> [workdir] [--language xx] [additional flags]"
+  echo "   INPUT_SOURCE: full URL to a YouTube video or mp3 song locally"
+  exit 1
+fi
+
+RAW_URL="$1"
+YT_URL="${RAW_URL//\\}" # strip any backslashes
+shift
+
+# Default workdir to current dir if next arg is not a flag
+WORKDIR="$PWD"
+if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+  WORKDIR="$1"
+  shift
+fi
+
+WORKDIR="$(cd "$WORKDIR" && pwd)"
+CONTAINER_DIR="$WORKDIR/songs"
+COMPOSE_FILE="$CONTAINER_DIR/compose-nogpu.yml"
+
+# Capture any remaining flags (e.g., --language xx)
+ULTRAS_FLAGS=("$@")
+
+if ! command -v docker >/dev/null; then
+  echo "Error: docker not installed."
+  exit 1
+fi
+if ! docker compose version >/dev/null 2>&1; then
+  echo "Error: your docker does not support 'docker compose'."
+  exit 1
+fi
+
+for d in output cache/lib/huggingface cache/lib/torch cache/lib/matplotlib local torch_ext; do
+  mkdir -p "$CONTAINER_DIR/$d"
+done
+
+chmod -R 777 "$CONTAINER_DIR" 2>/dev/null || true
+
+cat > "$COMPOSE_FILE" <<EOF
+services:
+  ultrasinger:
+    container_name: UltraSinger
+    image: rakuri255/ultrasinger:latest
+    stdin_open: true
+    tty: true
+    user: root
+    volumes:
+      - ${CONTAINER_DIR}/output:/app/UltraSinger/src/output
+      - ${CONTAINER_DIR}/cache:/root/.cache
+      - ${CONTAINER_DIR}/torch_ext:/app/UltraSinger/src/torch_ext
+      - ${CONTAINER_DIR}/local:/root/.local
+    environment:
+      - XDG_CACHE_HOME=/root/.cache
+      - TORCH_HOME=/root/.cache/torch
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface/hub
+      - MPLCONFIGDIR=/root/.cache/matplotlib
+      - TORCH_EXTENSIONS_DIR=/app/UltraSinger/src/torch_ext
+      - XDG_DATA_HOME=/root/.local
+EOF
+
+# Start container
+cd "$CONTAINER_DIR"
+if docker image inspect rakuri255/ultrasinger:latest >/dev/null 2>&1; then
+  docker compose -f compose-nogpu.yml up -d --force-recreate \
+    || docker compose -f compose-nogpu.yml up -d --build
+else
+  docker compose -f compose-nogpu.yml up -d --build
+fi
+
+# ensure MuseScore is available for sheet creation
+docker exec -u root UltraSinger bash -lc "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y musescore3 && apt-get clean"
+
+
+# Run UltraSinger with passed flags
+docker exec -u root -it UltraSinger bash -lc "cd /app/UltraSinger/src && python UltraSinger.py -i '$YT_URL' --musescore_path /bin/musescore3 ${ULTRAS_FLAGS[*]}"
+
+echo "Done. Check: $CONTAINER_DIR/output"
