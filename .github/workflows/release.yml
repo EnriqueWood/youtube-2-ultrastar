@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - '**'
 
 jobs:
   build-linux:
@@ -83,4 +85,3 @@ jobs:
             artifacts/youtube2ultrastar-windows/youtube2ultrastar.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
