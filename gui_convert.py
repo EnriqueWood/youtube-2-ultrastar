@@ -102,12 +102,40 @@ class ConverterApp(tk.Tk):
         except Exception:
             return False
 
-    def install_docker(self):
-        inst = os.path.join(os.getcwd(),'DockerDesktopInstaller.exe')
-        if not os.path.exists(inst):
-            url = 'https://desktop.docker.com/win/stable/Docker%20Desktop%20Installer.exe'
-            subprocess.run(['powershell','-Command',f"iwr -Uri {url} -OutFile {inst}"], check=True)
-        subprocess.run([inst,'install','--quiet'], check=True)
+    def show_docker_prompt(self):
+        popup = tk.Toplevel(self)
+        popup.title("Docker Required")
+        popup.geometry("400x160")
+        popup.resizable(False, False)
+        tk.Label(popup, text="You need to install Docker before continuing.", wraplength=380).pack(pady=10)
+
+        btn_frame = tk.Frame(popup)
+        btn_frame.pack(pady=5)
+
+        confirmed = {'value': False}
+        canceled = {'value': False}
+
+        def open_docker_download():
+            import webbrowser
+            webbrowser.open('https://desktop.docker.com/win/stable/Docker%20Desktop%20Installer.exe')
+
+        def check_again():
+            if self.check_docker():
+                confirmed['value'] = True
+                popup.destroy()
+            else:
+                messagebox.showwarning("Not Found", "Docker is still not installed.")
+
+        def cancel():
+            canceled['value'] = True
+            popup.destroy()
+
+        ttk.Button(btn_frame, text="Install Docker", command=open_docker_download).grid(row=0, column=0, padx=5)
+        ttk.Button(btn_frame, text="Check Again", command=check_again).grid(row=0, column=1, padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=cancel).grid(row=0, column=2, padx=5)
+
+        self.wait_window(popup)
+        return confirmed['value'] and not canceled['value']
 
     def start_conversion(self):
         # disable button and update text
@@ -123,7 +151,7 @@ class ConverterApp(tk.Tk):
             self._reset_ui()
             return
 
-        # Normalize YouTube URL: keep only 'v' param
+        # Normalize YouTube URL
         if src.startswith(('http://','https://')):
             try:
                 parts = urlparse(src)
@@ -138,17 +166,14 @@ class ConverterApp(tk.Tk):
             except Exception:
                 pass
 
-        # Docker check/install
+        # Docker check loop
         self.status_var.set('Checking Docker...')
         if not self.check_docker():
-            if messagebox.askyesno('Install?','Docker not found. Install?'):
-                self.status_var.set('Installing Docker...')
-                self.install_docker()
-            else:
+            if not self.show_docker_prompt():
                 self._reset_ui()
                 return
 
-        # Gather flags
+        # Flags
         self.status_var.set('Preparing flags...')
         flags = []
         for f, v in self.vars.items():
