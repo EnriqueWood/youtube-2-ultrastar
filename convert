@@ -18,6 +18,15 @@ RAW_URL="$1"
 YT_URL="${RAW_URL//\\}" # strip any backslashes
 shift
 
+# Take just up to the v query param
+pattern='[?&]v=([^&]+)'
+if [[ "$YT_URL" =~ $pattern ]]; then
+  vid="${BASH_REMATCH[1]}"
+  YT_URL="${YT_URL%%\?*}?v=$vid"
+else
+  YT_URL="${YT_URL%%\?*}"
+fi
+echo "Using $YT_URL as url"
 # Default workdir to current dir if next arg is not a flag
 WORKDIR="$PWD"
 if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
