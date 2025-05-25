@@ -10,49 +10,51 @@ This repository contains a simple Bash script that:
 1. Prepares and configures a Docker environment for UltraSinger (CPU-only, for now).
 2. Automatically mounts cache, output, and configuration directories.
 3. Builds and runs the `rakuri255/ultrasinger:latest` container.
-4. Downloads and converts a YouTube video into UltraStar-compatible files (MIDI, notes, lyrics).
+4. Supports both YouTube URLs and local media files (MP3/MP4).
+5. Forwards additional UltraSinger flags for custom model/options (e.g., `--language en`).
+6. Auto-installs MuseScore 3 in the container for sheet music (MusicXML, PDF not supported yet).
 
-It does **not** modify or include any of the original UltraSinger code—it merely automates the setup and execution steps.
+It does **not** modify or include any of the original UltraSinger code—it simply automates the setup and execution steps.
 
-## Usage
+## Usage for Linux Users
 
 1. Ensure you have `docker` and `docker compose` installed.
-2. Clone or download this repository.
+2. Download or clone this repository.
 3. Make the converter script executable:
    ```bash
    chmod +x convert
    ```
-4. Usage:
-   
-   Basic: Run the script with a YouTube URL (or the path to an .mp3 file):
-   
+4. Run the script:
+
+   **Basic (YouTube URL only):**
    ```bash
    ./convert "https://www.youtube.com/watch?v=VIDEO_ID"
    ```
-   
-   Advanced:
-   ```bash
-    ./convert <INPUT_SOURCE> [workdir] [--language xx] [additional UltraSinger flags]
-    ```
-    
-    - INPUT_SOURCE: full URL to a YouTube video or mp3 song locally
-    - workdir: directory where 'songs' will be created (default: $PWD)
-    - --language xx: override language detection, (i.e `--language en` or `--language es`)
-    - additional flags passed to UltraSinger
-      
-   ```bash
-   ./convert "https://www.youtube.com/watch?v=VIDEO_ID" ~/myultrastarsongs/ --language en --whisper large-v2 --format_version 2.0.0
-   ```
-   
-   For more documentation on additional UltraSinger flags, refer to the [UltraSigner repo](https://github.com/rakuri255/UltraSinger)
-   
-5. Find your UltraStar files.
 
-   Your UltraStar files will be located on your current directory if you did not pass an argument, otherwise, they will be in the argument passed after the input path (~/myultrastarsongs/ in the advanced example)
+   **Local file (MP3/MP4):**
+   ```bash
+   ./convert "/full/path/to/song.mp4"
+   ```
+
+   **Advanced:**
+   ```bash
+   ./convert <INPUT_SOURCE> [workdir] [--language xx] [additional UltraSinger flags]
+   ```
+   - `INPUT_SOURCE`: YouTube URL or full path to local MP3/MP4.
+   - `workdir`: directory where `songs/` will be created (default: current directory).
+   - `--language xx`: override language detection (e.g., `--language en` or `--language es`).
+   - Additional flags (e.g., `--whisper large-v2`, `--format_version 2.0.0`) will be forwarded to UltraSinger.
+
+   Example:
+   ```bash
+   ./convert "https://www.youtube.com/watch?v=VIDEO_ID" ~/my_songs --language en --whisper large-v2 --format_version 2.0.0
+   ```
+
+5. Find your UltraStar files in `songs/output/` under the chosen working directory.
 
 ## Disclaimer
 
-This script is provided **as-is** and is intended solely to simplify the process of converting YouTube videos for use with UltraStar.  
+This script is provided **as-is** and is intended solely to simplify the process of converting YouTube videos or local media for use with UltraStar.  
 Use it at your own risk. The author of this wrapper script **assumes no responsibility** for any damages, misuse, or legal issues that may arise from its use.  
-Please respect YouTube’s Terms of Service and any applicable copyright laws when downloading or converting video content.
-Please use only content you own or have permission to use—pirated material is strictly prohibited.
+Please respect YouTube’s Terms of Service and any applicable copyright laws when downloading or converting video content.  
+Use only content you own or have permission to use—pirated material is strictly prohibited.
