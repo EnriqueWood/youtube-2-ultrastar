@@ -16,6 +16,18 @@ This repository contains a simple Bash script that:
 
 It does **not** modify or include any of the original UltraSinger code—it simply automates the setup and execution steps.
 
+## Requirements
+
+- Docker
+
+## GUI Usage
+
+In addition to the command-line script, this project includes a graphical interface (GUI) designed for ease of use.
+
+Make sure you have Docker already installed on your system or the program will not allow you to continue without it.
+Once you have docker installed, paste the URL of the Youtube video or the path to your local mp3/mp4 local file
+and press 
+
 ## Usage for Linux Users
 
 1. Ensure you have `docker` and `docker compose` installed.

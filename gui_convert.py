@@ -37,7 +37,8 @@ class ConverterApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('YouTube-2-UltraStar (UltraSinger Wrapper)')
-        self.resizable(False, False)
+        self.resizable(True, True)
+        self.grid_columnconfigure(0, weight=1)
 
         # Input
         tk.Label(self, text='Input (YouTube URL or local MP3/MP4):').grid(column=0, row=0, padx=10, pady=5, sticky='w')
@@ -60,29 +61,55 @@ class ConverterApp(tk.Tk):
         self.adv_btn = btn
 
         # Advanced flags frame
-        self.frame = ttk.Frame(self)
+        # scrollable advanced‐options container
+        self.container =ttk.Frame(self)
+        self.container.grid(column=0, row=5, padx=10, sticky='nsew')
+        # hide it by default:
+        self.container.grid_forget()
+        self.container.grid_columnconfigure(0, weight=1)
+
+        # the canvas that will hold the scrolling content
+        self.canvas = tk.Canvas(self.container, height=200)
+        self.scroll = ttk.Scrollbar(self.container, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.scroll.set)
+
+        # place canvas & scrollbar
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.scroll.grid(row=0, column=1, sticky="ns")
+
+        # the actual frame inside the canvas
+        self.frame = ttk.Frame(self.canvas)
+        self.frame.grid_columnconfigure(1, weight=1)
+        self.frame_window = self.canvas.create_window((0,0), window=self.frame, anchor="nw")
+
+        # make sure scrolling region updates when frame resizes
+        self.frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.bind("<Configure>", lambda e:
+            self.canvas.itemconfigure(self.frame_window, width=e.width)
+        )
         self.vars, self.widgets = {}, {}
-        r=0
+
+        row=0
         for f, opts in ULTRAS_FLAGS.items():
             v = tk.BooleanVar()
             chk = ttk.Checkbutton(self.frame, text=f, variable=v, command=lambda f=f: self.toggle_flag(f))
-            chk.grid(column=0, row=r, sticky='w', padx=5)
+            chk.grid(column=0, row=row, sticky='w', padx=5)
             self.vars[f] = v
             if opts:
                 dd = ttk.Combobox(self.frame, values=opts, state='disabled')
-                dd.grid(column=1, row=r, padx=5)
+                dd.grid(column=1, row=row, padx=5, sticky='ew')
                 self.widgets[f] = dd
-            r += 1
+            row += 1
 
         self.convert_btn = ttk.Button(self, text='Convert', command=self.start_conversion)
-        self.convert_btn.grid(column=0, row=99, padx=10, pady=10)
+        self.convert_btn.grid(column=0, row=6, columnspan=2, pady=10, sticky='ew')
 
     def toggle(self):
         if not self.adv:
-            self.frame.grid(column=0, row=5, padx=10)
+            self.container.grid(column=0, row=5, padx=10, sticky='nsew')
             self.adv_btn.config(text='Hide Advanced')
         else:
-            self.frame.grid_forget()
+            self.container.grid_remove()
             self.adv_btn.config(text='Show Advanced')
         self.adv = not self.adv
 
@@ -287,8 +314,19 @@ class ConverterApp(tk.Tk):
         self.convert_btn.config(state='normal', text='Convert')
         self.progress['value'] = 100 if success else 0
         self.status_var.set('Done' if success else 'Ready')
+        self.src.set('')
         if success:
-            messagebox.showinfo('Done','Check songs/output')
-
+            messagebox.showinfo('Done','Conversion finished!')
+            output_dir = os.path.join(os.getcwd(), 'songs', 'output')
+            try:
+                if sys.platform.startswith('win'):
+                    os.startfile(output_dir)
+                elif sys.platform == 'darwin':
+                    subprocess.run(['open', output_dir], check=True)
+                else: # other
+                    subprocess.run(['xdg-open', output_dir], check=True)
+            except Exception as e:
+                # if for some reason it fails, show a warning
+                messagebox.showwarning(f'Could not open folder, your files should be in {output_dir}', str(e))
 if __name__=='__main__':
     ConverterApp().mainloop()
