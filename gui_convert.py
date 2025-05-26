@@ -4,7 +4,7 @@ import sys
 import threading
 import re
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, scrolledtext
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 ULTRAS_FLAGS = {
@@ -61,35 +61,27 @@ class ConverterApp(tk.Tk):
         self.adv_btn = btn
 
         # Advanced flags frame
-        # scrollable advanced‐options container
-        self.container =ttk.Frame(self)
+        self.container = ttk.Frame(self)
         self.container.grid(column=0, row=5, padx=10, sticky='nsew')
-        # hide it by default:
         self.container.grid_forget()
         self.container.grid_columnconfigure(0, weight=1)
 
-        # the canvas that will hold the scrolling content
+        # Scrolling canvas
         self.canvas = tk.Canvas(self.container, height=200)
         self.scroll = ttk.Scrollbar(self.container, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.scroll.set)
-
-        # place canvas & scrollbar
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.scroll.grid(row=0, column=1, sticky="ns")
 
-        # the actual frame inside the canvas
+        # Inner frame
         self.frame = ttk.Frame(self.canvas)
         self.frame.grid_columnconfigure(1, weight=1)
         self.frame_window = self.canvas.create_window((0,0), window=self.frame, anchor="nw")
-
-        # make sure scrolling region updates when frame resizes
         self.frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.bind("<Configure>", lambda e:
-            self.canvas.itemconfigure(self.frame_window, width=e.width)
-        )
+        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(self.frame_window, width=e.width))
         self.vars, self.widgets = {}, {}
 
-        row=0
+        row = 0
         for f, opts in ULTRAS_FLAGS.items():
             v = tk.BooleanVar()
             chk = ttk.Checkbutton(self.frame, text=f, variable=v, command=lambda f=f: self.toggle_flag(f))
@@ -101,16 +93,25 @@ class ConverterApp(tk.Tk):
                 self.widgets[f] = dd
             row += 1
 
+        # Log display
+        self.log_frame = ttk.LabelFrame(self, text="Logs")
+        self.log_frame.grid(column=0, row=6, padx=10, pady=5, sticky='nsew')
+        self.log_frame.grid_columnconfigure(0, weight=1)
+        self.log_frame.grid_rowconfigure(0, weight=1)
+        self.log_display = scrolledtext.ScrolledText(self.log_frame, height=10, wrap=tk.WORD)
+        self.log_display.grid(column=0, row=0, padx=5, pady=5, sticky='nsew')
+        self.log_display.config(state=tk.DISABLED)
+
         self.convert_btn = ttk.Button(self, text='Convert', command=self.start_conversion)
-        self.convert_btn.grid(column=0, row=6, columnspan=2, pady=10, sticky='ew')
+        self.convert_btn.grid(column=0, row=7, columnspan=2, pady=10, sticky='ew')
 
     def toggle(self):
         if not self.adv:
             self.container.grid(column=0, row=5, padx=10, sticky='nsew')
-            self.adv_btn.config(text='Hide Advanced')
+            self.adv_btn.config(text='Hide Advanced Options')
         else:
             self.container.grid_remove()
-            self.adv_btn.config(text='Show Advanced')
+            self.adv_btn.config(text='Show Advanced Options')
         self.adv = not self.adv
 
     def toggle_flag(self, flag):
@@ -120,6 +121,12 @@ class ConverterApp(tk.Tk):
             w.set(ULTRAS_FLAGS[flag][0])
         elif w:
             w.config(state='disabled')
+
+    def _append_log(self, text):
+        self.log_display.config(state=tk.NORMAL)
+        self.log_display.insert(tk.END, text)
+        self.log_display.see(tk.END)
+        self.log_display.config(state=tk.DISABLED)
 
     def check_docker(self):
         try:
@@ -165,17 +172,39 @@ class ConverterApp(tk.Tk):
         return confirmed['value'] and not canceled['value']
 
     def start_conversion(self):
-        # disable button and update text
+        self.log_display.config(state=tk.NORMAL)
+        self.log_display.delete('1.0', tk.END)
+        self.log_display.config(state=tk.DISABLED)
         self.convert_btn.config(state='disabled', text='Processing...')
         self.progress['value'] = 0
         threading.Thread(target=self.convert, daemon=True).start()
 
+    def run_logged(self, cmd, label, cwd=None):
+        """Run cmd as subprocess, set status to label, stream output to both log widget and console."""
+        self.status_var.set(label)
+        proc = subprocess.Popen(cmd,
+                                cwd=cwd,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
+                                text=True,
+                                bufsize=1)  # line-buffered
+        for raw in proc.stdout:
+            print(raw, end='')
+            # strip ANSI color codes
+            clean = re.sub(r"\x1b\[[0-9;]*m", "", raw)
+            msg = clean if clean.endswith('\n') else clean + '\n'
+            self.after(0, self._append_log, msg)
+
+
+        ret = proc.wait()
+        if ret != 0:
+            raise subprocess.CalledProcessError(ret, cmd)
+
     def convert(self):
-        self.status_var.set('Initializing...')
         src = self.src.get().strip()
         if not src:
-            messagebox.showerror('Error','Enter valid input')
-            self._reset_ui()
+            self.after(0, messagebox.showerror, 'Error', 'Enter valid input')
+            self.after(0, self._reset_ui, False)
             return
 
         # Normalize YouTube URL
@@ -189,8 +218,8 @@ class ConverterApp(tk.Tk):
                     src = urlunparse(parts)
                 else:
                     parts = parts._replace(query='')
-                    src = urlunparse(parts)
-            except Exception:
+                src = urlunparse(parts)
+            except:
                 pass
 
         # Docker check loop
@@ -242,16 +271,20 @@ class ConverterApp(tk.Tk):
             f.write(yml)
 
         # Start container
-        self.status_var.set('Starting container...')
-        subprocess.run(['docker','compose','-f','compose-nogpu.yml','up','-d','--force-recreate'], cwd=songs, check=True)
-
+        self.run_logged(
+            ['docker','compose','-f','compose-nogpu.yml','up','-d','--force-recreate'],
+            'Starting container...',
+            cwd=songs
+        )
         # Install MuseScore
-        self.status_var.set('Installing MuseScore...')
-        subprocess.run([
-            'docker','exec','-u','root','UltraSinger','bash','-lc',
-            "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y musescore3 && apt-get clean"
-        ], cwd=songs, check=True)
-
+        self.run_logged(
+            [
+                'docker','exec','-u','root','UltraSinger','bash','-lc',
+                "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y musescore3 && apt-get clean"
+            ],
+            'Installing MuseScore...',
+            cwd=songs
+        )
         # Run conversion with log monitoring
         self.status_var.set('Converting...')
         cmd = ['docker','exec','-u','root','UltraSinger','bash','-lc',
@@ -263,70 +296,71 @@ class ConverterApp(tk.Tk):
         slash_pct_pattern = re.compile(r"^\s*(\d+)\s*/\s*(\d+)")  # new heuristic
         generic_pct_pattern = re.compile(r"([0-9]+(?:\.[0-9]+)?)%")
         last_label = 'Working'
-        for line in proc.stdout:
-            clean = re.sub(r"\x1b\[[0-9;]*m", "", line)
-            print(clean, end='')
-            line = re.sub(r"\x1b\[[0-9;]*m", "", line) #clean line from color codes
-            m = re.match(r".*\[UltraSinger\]\s*(.*)", clean)
-            if m:
-                last_label = m.group(1).strip() or "Working"
-                print(f"[DEBUG] Label set to: '{last_label}'")
+        for raw in proc.stdout:
+            clean = re.sub(r"\x1b\[[0-9;]*m", "", raw)
+            msg = clean if clean.endswith('\n') else clean + '\n'
+            self.after(0, self._append_log, msg)
             # update on item downloads
-            m_item = item_pattern.search(line)
+            m_item = item_pattern.search(clean)
             if m_item:
                 cur, tot = map(int, m_item.groups())
                 pct = int(cur / tot * 100)
                 self.progress['value'] = pct
                 self.status_var.set(f"Downloading item {cur} of {tot}")
-                print(f"[DEBUG] Item download: {pct}%")
+                msg = f"[DEBUG] Item download: {pct}%"
+                self.after(0, self._append_log, msg)
             else:
                 # slash-based counts (e.g. 1/552)
-                m_slash = slash_pct_pattern.match(line)
+                m_slash = slash_pct_pattern.match(clean)
                 if m_slash:
                     cur, tot = map(int, m_slash.groups())
                     pct = int(cur / tot * 100)
                     self.progress['value'] = pct
                     self.status_var.set(last_label)
-                    print(f"[DEBUG] Slash progress: {pct}%, label: '{last_label}'")
+                    msg = f"[DEBUG] Slash progress: {pct}%, label: '{last_label}'"
+                    self.after(0, self._append_log, msg)
                 else:
                     # youtube-dl download percentages or demucs
-                    m_dl = download_pct_pattern.match(line)
-                    m_dm = demucs_pct_pattern.match(line)
+                    m_dl = download_pct_pattern.match(clean)
+                    m_dm = demucs_pct_pattern.match(clean)
                     if m_dl or m_dm:
                         pct = int(float((m_dl or m_dm).group(1)))
                         self.progress['value'] = pct
                         self.status_var.set(last_label)
-                        print(f"[DEBUG] Progress update: {pct}%, label: '{last_label}'")
+                        msg = f"[DEBUG] Progress update: {pct}%, label: '{last_label}'"
+                        self.after(0, self._append_log, msg)
                     else:
                         # fallback: any percentage
-                        m_gen = generic_pct_pattern.search(line)
+                        m_gen = generic_pct_pattern.search(clean)
                         if m_gen:
                             pct = int(float(m_gen.group(1)))
                             self.progress['value'] = pct
                             self.status_var.set('Working...')
-                            print(f"[DEBUG] Fallback progress: {pct}% (Working...)")
+                            msg =  f"[DEBUG] Fallback progress: {pct}% (Working...)"
+                            self.after(0, self._append_log, msg)
+
         proc.wait()
+        self.after(0, self._reset_ui, proc.returncode == 0)
 
-        self._reset_ui(success=(proc.returncode==0))
-
-    def _reset_ui(self, success=False):
-        # restore button
+    def _reset_ui(self, success):
         self.convert_btn.config(state='normal', text='Convert')
         self.progress['value'] = 100 if success else 0
         self.status_var.set('Done' if success else 'Ready')
         self.src.set('')
+
         if success:
-            messagebox.showinfo('Done','Conversion finished!')
+            self.after(0, messagebox.showinfo, 'Done', 'Conversion finished!')
             output_dir = os.path.join(os.getcwd(), 'songs', 'output')
             try:
                 if sys.platform.startswith('win'):
                     os.startfile(output_dir)
                 elif sys.platform == 'darwin':
                     subprocess.run(['open', output_dir], check=True)
-                else: # other
+                else:
                     subprocess.run(['xdg-open', output_dir], check=True)
             except Exception as e:
-                # if for some reason it fails, show a warning
-                messagebox.showwarning(f'Could not open folder, your files should be in {output_dir}', str(e))
-if __name__=='__main__':
+                self.after(0, messagebox.showwarning,
+                           'Could not open folder', str(e))
+
+if __name__ == '__main__':
     ConverterApp().mainloop()
