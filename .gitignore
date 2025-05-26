@@ -1,2 +1,8 @@
 songs
 .idea
+build
+dist
+.venv
+gui_convert.spec
+youtube-2-ultrastar
+*.exe
