@@ -5,8 +5,6 @@
 
 ## What This Script Does
 
-This repository contains a simple Bash script that:
-
 1. Prepares and configures a Docker environment for UltraSinger (CPU-only, for now).
 2. Automatically mounts cache, output, and configuration directories.
 3. Builds and runs the `rakuri255/ultrasinger:latest` container.
@@ -27,6 +25,16 @@ In addition to the command-line script, this project includes a graphical interf
 Make sure you have Docker already installed on your system or the program will not allow you to continue without it.
 Once you have docker installed, paste the URL of the Youtube video or the path to your local mp3/mp4 local file
 and press 
+
+## Configuration file
+
+You can save your "Advanced options" going to `File -> Save Options`
+
+In Linux systems, it will create your config file in `~/.config/.youtube2ultrastar.conf`
+In Windows systems, it will create your config file in `%APPDATA%/.youtube2ultrastar.conf`
+In macOS systems, it will create your config file in `'~/Library/Application Support/.youtube2ultrastar.conf`
+
+The program will automatically load the configuration file if it exists in the system.
 
 ## Usage for Linux Users
 
@@ -52,7 +60,7 @@ and press
    ```bash
    ./convert <INPUT_SOURCE> [workdir] [--language xx] [additional UltraSinger flags]
    ```
-   - `INPUT_SOURCE`: YouTube URL or full path to local MP3/MP4.
+   - `INPUT_SOURCE`: YouTube URL or local file. (local files should be place in a folder named `input` inside your `songs` folder)
    - `workdir`: directory where `songs/` will be created (default: current directory).
    - `--language xx`: override language detection (e.g., `--language en` or `--language es`).
    - Additional flags (e.g., `--whisper large-v2`, `--format_version 2.0.0`) will be forwarded to UltraSinger.

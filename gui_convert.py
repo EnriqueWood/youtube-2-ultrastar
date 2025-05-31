@@ -8,14 +8,14 @@ from tkinter import ttk, messagebox, scrolledtext
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 ULTRAS_FLAGS = {
-    'whisper': ['tiny','base','small','medium','large-v1','large-v2','large-v3',
-                'tiny.en','base.en','small.en','medium.en'],
+    'whisper': ['tiny', 'base', 'small', 'medium', 'large-v1', 'large-v2', 'large-v3',
+                'tiny.en', 'base.en', 'small.en', 'medium.en'],
     'whisper_align_model': None,
-    'language': ['en','fr','de','es','it','ja','zh','nl','uk','pt'],
+    'language': ['en', 'es', 'fr', 'de', 'it', 'ja', 'zh', 'nl', 'uk', 'pt'],
     'whisper_batch_size': None,
-    'whisper_compute_type': ['float16','int8'],
+    'whisper_compute_type': ['float16', 'int8'],
     'keep_numbers': None,
-    'crepe': ['tiny','full'],
+    'crepe': ['tiny', 'full'],
     'crepe_step_size': None,
     'disable_hyphenation': None,
     'disable_separation': None,
@@ -23,14 +23,13 @@ ULTRAS_FLAGS = {
     'create_audio_chunks': None,
     'keep_cache': None,
     'plot': None,
-    'format_version': ['0.3.0','1.0.0','1.1.0','1.2.0','2.0.0'],
-    'musescore_path': None,
-    'ffmpeg': None,
+    'format_version': ['0.3.0', '1.0.0', '1.1.0', '1.2.0', '2.0.0'],
     'cookiefile': None,
     'force_cpu': None,
     'force_whisper_cpu': None,
     'force_crepe_cpu': None
 }
+
 
 class ConverterApp(tk.Tk):
     def __init__(self):
@@ -50,7 +49,7 @@ class ConverterApp(tk.Tk):
 
         # Progress bar
         self.progress = ttk.Progressbar(self, mode='determinate', maximum=100)
-        self.progress.grid(column=0, row=3, padx=10, pady=(0,5), sticky='we')
+        self.progress.grid(column=0, row=3, padx=10, pady=(0, 5), sticky='we')
         self.progress['value'] = 0
 
         # Advanced toggle
@@ -75,12 +74,20 @@ class ConverterApp(tk.Tk):
         # Inner frame
         self.frame = ttk.Frame(self.canvas)
         self.frame.grid_columnconfigure(1, weight=1)
-        self.frame_window = self.canvas.create_window((0,0), window=self.frame, anchor="nw")
+        self.frame_window = self.canvas.create_window((0, 0), window=self.frame, anchor="nw")
         self.frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(self.frame_window, width=e.width))
         self.vars, self.widgets = {}, {}
-
+        self.vars['generate_musescore'] = tk.BooleanVar(value=False)
         row = 0
+        generate_musescore_cb = ttk.Checkbutton(
+            self.frame,
+            text="Generate MuseScore XML",
+            variable=self.vars['generate_musescore'],
+            style="Switch.TCheckbutton"
+        )
+        generate_musescore_cb.grid(row=row, column=0, sticky="w", padx=5, pady=2)
+        row = 1
         for f, opts in ULTRAS_FLAGS.items():
             v = tk.BooleanVar()
             chk = ttk.Checkbutton(self.frame, text=f, variable=v, command=lambda f=f: self.toggle_flag(f))
@@ -139,8 +146,8 @@ class ConverterApp(tk.Tk):
 
     def check_docker(self):
         try:
-            subprocess.check_output(['docker','--version'])
-            subprocess.check_output(['docker','compose','version'])
+            subprocess.check_output(['docker', '--version'])
+            subprocess.check_output(['docker', 'compose', 'version'])
             return True
         except Exception:
             return False
@@ -258,7 +265,6 @@ class ConverterApp(tk.Tk):
             msg = clean if clean.endswith('\n') else clean + '\n'
             self.after(0, self._append_log, msg)
 
-
         ret = proc.wait()
         if ret != 0:
             raise subprocess.CalledProcessError(ret, cmd)
@@ -271,7 +277,7 @@ class ConverterApp(tk.Tk):
             return
 
         # Normalize YouTube URL
-        if src.startswith(('http://','https://')):
+        if src.startswith(('http://', 'https://')):
             try:
                 parts = urlparse(src)
                 qs = parse_qs(parts.query)
@@ -284,6 +290,8 @@ class ConverterApp(tk.Tk):
                 src = urlunparse(parts)
             except:
                 pass
+        else:
+            src = f"/app/UltraSinger/src/input/{src}"
 
         # Docker check loop
         self.status_var.set('Checking Docker...')
@@ -306,10 +314,10 @@ class ConverterApp(tk.Tk):
         # Write compose file
         self.status_var.set('Writing compose file...')
         wd = os.getcwd()
-        songs = os.path.join(wd,'songs')
+        songs = os.path.join(wd, 'songs')
         os.makedirs(songs, exist_ok=True)
-        for d in ['output','cache','local','torch_ext']:
-            os.makedirs(os.path.join(songs,d), exist_ok=True)
+        for d in ['input', 'output', 'cache', 'local', 'torch_ext']:
+            os.makedirs(os.path.join(songs, d), exist_ok=True)
         yml = f"""services:
   ultrasinger:
     container_name: UltraSinger
@@ -319,6 +327,7 @@ class ConverterApp(tk.Tk):
     user: root
     volumes:
       - {songs}/output:/app/UltraSinger/src/output
+      - {songs}/input:/app/UltraSinger/src/input
       - {songs}/cache:/root/.cache
       - {songs}/torch_ext:/app/UltraSinger/src/torch_ext
       - {songs}/local:/root/.local
@@ -330,28 +339,29 @@ class ConverterApp(tk.Tk):
       - TORCH_EXTENSIONS_DIR=/app/UltraSinger/src/torch_ext
       - XDG_DATA_HOME=/root/.local
 """
-        with open(os.path.join(songs,'compose-nogpu.yml'),'w') as f:
+        with open(os.path.join(songs, 'compose-nogpu.yml'), 'w') as f:
             f.write(yml)
 
         # Start container
         self.run_logged(
-            ['docker','compose','-f','compose-nogpu.yml','up','-d','--force-recreate'],
+            ['docker', 'compose', '-f', 'compose-nogpu.yml', 'up', '-d'],
             'Starting container...',
             cwd=songs
         )
-        # Install MuseScore
-        self.run_logged(
-            [
-                'docker','exec','-u','root','UltraSinger','bash','-lc',
-                "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y musescore3 && apt-get clean"
-            ],
-            'Installing MuseScore...',
-            cwd=songs
-        )
+        if self.vars['generate_musescore'].get():
+            self.run_logged(
+                [
+                    'docker', 'exec', '-u', 'root', 'UltraSinger', 'bash', '-lc',
+                    "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y musescore3 && apt-get clean"
+                ],
+                'Installing MuseScore...',
+                cwd=songs
+            )
+
         # Run conversion with log monitoring
         self.status_var.set('Converting...')
-        cmd = ['docker','exec','-u','root','UltraSinger','bash','-lc',
-               f"cd /app/UltraSinger/src && python UltraSinger.py -i '{src}' {' '.join(flags)}"]
+        cmd = ['docker', 'exec', '-u', 'root', 'UltraSinger', 'bash', '-lc',
+               f"cd /app/UltraSinger/src && python UltraSinger.py -i '{src}' -o '/app/UltraSinger/src/output' {' '.join(flags)}"]
         proc = subprocess.Popen(cmd, cwd=songs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         item_pattern = re.compile(r"Downloading item (\d+) of (\d+)")
         download_pct_pattern = re.compile(r"^\[download\]\s*([0-9]+(?:\.[0-9]+)?)%")
@@ -399,7 +409,7 @@ class ConverterApp(tk.Tk):
                             pct = int(float(m_gen.group(1)))
                             self.progress['value'] = pct
                             self.status_var.set('Working...')
-                            msg =  f"[DEBUG] Fallback progress: {pct}% (Working...)"
+                            msg = f"[DEBUG] Fallback progress: {pct}% (Working...)"
                             self.after(0, self._append_log, msg)
 
         proc.wait()
