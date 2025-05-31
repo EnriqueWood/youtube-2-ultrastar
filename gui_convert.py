@@ -8,7 +8,6 @@ from tkinter import ttk, messagebox, scrolledtext
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 ULTRAS_FLAGS = {
-    'interactive': None,
     'whisper': ['tiny','base','small','medium','large-v1','large-v2','large-v3',
                 'tiny.en','base.en','small.en','medium.en'],
     'whisper_align_model': None,
@@ -105,6 +104,16 @@ class ConverterApp(tk.Tk):
         self.convert_btn = ttk.Button(self, text='Convert', command=self.start_conversion)
         self.convert_btn.grid(column=0, row=7, columnspan=2, pady=10, sticky='ew')
 
+        self.config_file = os.path.join(self.get_user_config_dir(), '.youtube2ultrastar.conf')
+        self.load_config()
+
+        # Menu bar
+        menubar = tk.Menu(self)
+        filemenu = tk.Menu(menubar, tearoff=0)
+        filemenu.add_command(label="Save Options", command=self.save_config)
+        menubar.add_cascade(label="File", menu=filemenu)
+        self.config(menu=menubar)
+
     def toggle(self):
         if not self.adv:
             self.container.grid(column=0, row=5, padx=10, sticky='nsew')
@@ -135,6 +144,60 @@ class ConverterApp(tk.Tk):
             return True
         except Exception:
             return False
+
+    def get_user_config_dir(self):
+        if sys.platform.startswith('win'):
+            return os.getenv('APPDATA', os.path.expanduser('~'))
+        elif sys.platform == 'darwin':
+            return os.path.expanduser('~/Library/Application Support')
+        else:
+            return os.getenv('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
+
+    def load_config(self):
+        if os.path.isfile(self.config_file):
+            try:
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#'): continue
+                        if '=' in line:
+                            key, val = line.split('=', 1)
+                            key = key.strip()
+                            val = val.strip()
+                            if key in self.vars:
+                                self.vars[key].set(True)
+                                widget = self.widgets.get(key)
+                                if widget:
+                                    widget.config(state='readonly')
+                                    widget.set(val)
+            except Exception as e:
+                print(f"Failed to load config: {e}")
+
+    def save_config(self):
+        try:
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                for key, var in self.vars.items():
+                    if key == 'language':
+                        continue  # skip language
+
+                    var_enabled = var.get()
+                    widget = self.widgets.get(key)
+
+                    if var_enabled:
+                        # Option is enabled
+                        if widget and widget.get():
+                            # Save with dropdown value
+                            f.write(f"{key}={widget.get()}\n")
+                        else:
+                            # Save as true for checkboxes without dropdowns
+                            f.write(f"{key}=true\n")
+                    else:
+                        # Save disabled state explicitly
+                        f.write(f"#{key}=false\n")
+
+            messagebox.showinfo("Saved", "Configuration saved successfully.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save config: {e}")
 
     def show_docker_prompt(self):
         popup = tk.Toplevel(self)
